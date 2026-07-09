@@ -30,6 +30,7 @@ import {
   handleAdminQueueStatus,
   handleAdminUserLogs,
   handleAdminAllLogs,
+  handleAdminPrewarm,
 } from "./handlers/admin.js";
 import { handleHealth } from "./handlers/health.js";
 import { handleDismiss } from "./handlers/dismiss.js";
@@ -105,6 +106,7 @@ app.post("/admin/api/regenerate-all", handleAdminRegenerateAll);
 app.get("/admin/api/queue-status", handleAdminQueueStatus);
 app.get("/admin/api/logs/:uuid", handleAdminUserLogs);
 app.get("/admin/api/logs", handleAdminAllLogs);
+app.post("/admin/api/prewarm", handleAdminPrewarm);
 
 // 404 fallback
 app.notFound((c) => {

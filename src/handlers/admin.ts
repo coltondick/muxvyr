@@ -166,6 +166,21 @@ export async function handleAdminAllLogs(c: Context): Promise<Response> {
   }
 }
 
+/**
+ * POST /admin/api/prewarm — triggers Cinemeta cache prewarm.
+ */
+export async function handleAdminPrewarm(c: Context): Promise<Response> {
+  const authErr = checkAuth(c);
+  if (authErr) return authErr;
+  try {
+    const { prewarmCinemetaGlobal } = await import("../services/cinemeta-prewarm.js");
+    const count = await prewarmCinemetaGlobal();
+    return c.json({ success: true, cached: count });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Failed" }, 500);
+  }
+}
+
 const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
