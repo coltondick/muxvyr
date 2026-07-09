@@ -1,67 +1,59 @@
-version: "3.8"
+name: muxvyr-ai
+
+x-app-common: &app-common
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  env_file:
+    - .env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+x-healthcheck-interval: &healthcheck-defaults
+  interval: 5s
+  timeout: 3s
+  retries: 5
 
 services:
   app:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    env_file:
-      - .env
-    networks:
-      - default
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    <<: *app-common
+    ports:
+      - "3000:3000"
     command: ["node", "dist/src/server.js"]
-    restart: unless-stopped
 
   worker:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    env_file:
-      - .env
-    networks:
-      - default
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    <<: *app-common
     command: ["node", "dist/src/worker.js"]
-    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: muxvyr
-    networks:
-      - default
+      POSTGRES_DB: stremio_ai
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      <<: *healthcheck-defaults
 
   redis:
     image: redis:7-alpine
     volumes:
-      - ./data/redis:/data
+      - redis_data:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - default
+      <<: *healthcheck-defaults
+
+volumes:
+  postgres_data:
+  redis_data:
 
 networks:
   default:
