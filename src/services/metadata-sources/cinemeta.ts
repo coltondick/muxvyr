@@ -48,7 +48,7 @@ export function createCinemetaSource(): MetadataSource {
         const type = title.type === "series" ? "series" : "movie";
         const query = encodeURIComponent(title.title);
         const searchUrl = `${CINEMETA_BASE_URL}/catalog/${type}/top/search=${query}.json`;
-        const response = await fetch(searchUrl);
+        const response = await fetch(searchUrl, { redirect: "follow" });
 
         if (!response.ok) {
           // Cache the miss for 1 hour to avoid repeated failed lookups

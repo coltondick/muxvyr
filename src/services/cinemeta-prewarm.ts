@@ -11,7 +11,7 @@
 import { redis } from "../lib/redis.js";
 import crypto from "node:crypto";
 
-const CINEMETA_BASE = "https://v3-cinemeta.strem.io";
+const CINEMETA_BASE = "https://cinemeta-catalogs.strem.io/top";
 const CACHE_TTL = 86400; // 24 hours
 
 const GENRES = [
@@ -47,7 +47,7 @@ export async function prewarmCinemetaGlobal(): Promise<number> {
     try {
       // Fetch top catalog (returns popular titles)
       const url = `${CINEMETA_BASE}/catalog/${type}/top.json`;
-      const response = await fetch(url);
+      const response = await fetch(url, { redirect: "follow" });
       if (!response.ok) continue;
 
       const data = (await response.json()) as { metas?: CinemetaItem[] };
@@ -88,7 +88,7 @@ export async function prewarmCinemetaGlobal(): Promise<number> {
       for (const genre of GENRES) {
         try {
           const genreUrl = `${CINEMETA_BASE}/catalog/${type}/top/genre=${encodeURIComponent(genre)}.json`;
-          const genreRes = await fetch(genreUrl);
+          const genreRes = await fetch(genreUrl, { redirect: "follow" });
           if (!genreRes.ok) continue;
 
           const genreData = (await genreRes.json()) as { metas?: CinemetaItem[] };
