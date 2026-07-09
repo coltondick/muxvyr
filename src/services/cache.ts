@@ -120,3 +120,30 @@ export async function scanKeys(pattern: string): Promise<string[]> {
   } while (cursor !== "0");
   return allKeys;
 }
+
+/**
+ * Prewarms the Cinemeta cache for a user's watch history.
+ * Fetches metadata for each title if not already cached.
+ */
+export async function prewarmCinemetaCache(
+  watchHistory: Array<{ title: string; type: "movie" | "series" }>
+): Promise<number> {
+  const { createCinemetaSource } = await import("./metadata-sources/cinemeta.js");
+  const cinemeta = createCinemetaSource();
+  let warmed = 0;
+
+  // Resolve all in parallel — cache hits are instant, misses will fetch and cache
+  const results = await Promise.allSettled(
+    watchHistory.slice(0, 50).map((item) =>
+      cinemeta.resolve({ title: item.title, type: item.type })
+    )
+  );
+
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) {
+      warmed++;
+    }
+  }
+
+  return warmed;
+}

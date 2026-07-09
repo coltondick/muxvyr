@@ -79,7 +79,7 @@ export function buildManifest(
     name: "AI Recommendations",
     description:
       "Personalized AI-powered content recommendations based on your watch history",
-    resources: ["catalog", { name: "meta", types: ["movie", "series"], idPrefixes: ["tt"] }],
+    resources: ["catalog", "meta"],
     types: ["movie", "series"],
     catalogs,
     idPrefixes: ["tt"],

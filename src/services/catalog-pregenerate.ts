@@ -14,7 +14,7 @@ import { generateRecommendations } from "./ai-engine.js";
 import { resolveMetadata } from "./metadata-resolver.js";
 import type { StremioMetaPreview } from "./metadata-resolver.js";
 import type { RecommendedTitle } from "./ai-providers/types.js";
-import { setCatalog } from "./cache.js";
+import { setCatalog, prewarmCinemetaCache } from "./cache.js";
 import { getEncryptionKey } from "../lib/config.js";
 import { query } from "../lib/db.js";
 import { redis } from "../lib/redis.js";
@@ -28,23 +28,21 @@ import {
 const GENERATION_LOCK_TTL = 300;
 
 /**
- * Resolves metadata for a list of recommended titles in parallel (batch of 5).
+ * Resolves metadata for a list of recommended titles in parallel (batch of 10).
  */
 async function resolveMetadataBatch(
   recommendations: RecommendedTitle[],
   excludeIds: Set<string>
 ): Promise<StremioMetaPreview[]> {
   const results: StremioMetaPreview[] = [];
-  for (let i = 0; i < recommendations.length; i += 5) {
-    const batch = recommendations.slice(i, i + 5);
-    const batchResults = await Promise.allSettled(
-      batch.map((rec) => resolveMetadata(rec))
-    );
-    for (const result of batchResults) {
-      if (result.status === "fulfilled" && result.value && !excludeIds.has(result.value.id)) {
-        results.push(result.value);
-        excludeIds.add(result.value.id);
-      }
+  // Process ALL in parallel — Cinemeta can handle it
+  const batchResults = await Promise.allSettled(
+    recommendations.map((rec) => resolveMetadata(rec))
+  );
+  for (const result of batchResults) {
+    if (result.status === "fulfilled" && result.value && !excludeIds.has(result.value.id)) {
+      results.push(result.value);
+      excludeIds.add(result.value.id);
     }
   }
   return results;
@@ -168,37 +166,39 @@ export async function pregenerateCatalogs(uuid: string): Promise<void> {
     const watchHistory = await fetchWatchHistory(nuvioCredentials, uuid);
     const usedTitleIds = new Set<string>();
 
+    // Prewarm Cinemeta cache for watch history titles (runs in parallel, fast for cache hits)
+    await prewarmCinemetaCache(watchHistory);
+
     // Load recommendation history and dismissed titles for prompt
     const alreadyRecommended = await getRecommendationHistoryTitles(uuid, 50);
     const dismissedIds = await getDismissedTitles(uuid);
 
-    // Generate movie and series catalogs sequentially
-    for (const contentType of ["movie", "series"] as const) {
-      const startTime = Date.now();
-      try {
-        const result = await generateSingleCatalog(
-          config, apiKey, watchHistory, contentType, "general", undefined, usedTitleIds, alreadyRecommended, dismissedIds
-        );
-
-        // Filter out dismissed titles from results
-        const filteredItems = result.items.filter((item) => !dismissedIds.includes(item.id));
-
-        if (filteredItems.length > 0) {
-          await setCatalog(uuid, `ai-recommendations-${contentType}`, filteredItems);
-          // Save to recommendation history
-          await saveRecommendationHistory(uuid, filteredItems, "general");
+    // Generate movie and series catalogs IN PARALLEL
+    const generalResults = await Promise.allSettled(
+      (["movie", "series"] as const).map(async (contentType) => {
+        const startTime = Date.now();
+        try {
+          const result = await generateSingleCatalog(
+            config, apiKey, watchHistory, contentType, "general", undefined, new Set(usedTitleIds), alreadyRecommended, dismissedIds
+          );
+          const filteredItems = result.items.filter((item) => !dismissedIds.includes(item.id));
+          if (filteredItems.length > 0) {
+            await setCatalog(uuid, `ai-recommendations-${contentType}`, filteredItems);
+            await saveRecommendationHistory(uuid, filteredItems, "general");
+            for (const item of filteredItems) usedTitleIds.add(item.id);
+          }
+          const duration = Date.now() - startTime;
+          await logGeneration(uuid, "general", contentType, filteredItems.length, duration);
+          return filteredItems;
+        } catch (err) {
+          const duration = Date.now() - startTime;
+          await logGeneration(uuid, "general", contentType, 0, duration, err instanceof Error ? err.message : "Unknown error");
+          return [];
         }
+      })
+    );
 
-        const duration = Date.now() - startTime;
-        await logGeneration(uuid, "general", contentType, filteredItems.length, duration);
-      } catch (err) {
-        const duration = Date.now() - startTime;
-        await logGeneration(uuid, "general", contentType, 0, duration, err instanceof Error ? err.message : "Unknown error");
-        continue;
-      }
-    }
-
-    // Generate BYW catalogs for the 4 most recent unique watch history items
+    // Generate BYW catalogs for the 4 most recent unique watch history items — ALL IN PARALLEL
     const seenTitles = new Set<string>();
     const recentItems: typeof watchHistory = [];
     for (const item of watchHistory) {
@@ -207,32 +207,29 @@ export async function pregenerateCatalogs(uuid: string): Promise<void> {
         recentItems.push(item);
       }
     }
-    for (const item of recentItems) {
-      const startTime = Date.now();
-      try {
-        const identifier = item.imdb_id ?? sanitizeTitleForId(item.title);
-        const catalogId = `byw-${item.type}-${identifier}`;
-        const result = await generateSingleCatalog(
-          config, apiKey, watchHistory, item.type, "because-you-watched", item.title, usedTitleIds, alreadyRecommended, dismissedIds
-        );
 
-        // Filter out dismissed titles
-        const filteredItems = result.items.filter((i) => !dismissedIds.includes(i.id));
-
-        if (filteredItems.length > 0) {
-          await setCatalog(uuid, catalogId, filteredItems);
-          // Save to recommendation history
-          await saveRecommendationHistory(uuid, filteredItems, "byw");
+    await Promise.allSettled(
+      recentItems.map(async (item) => {
+        const startTime = Date.now();
+        try {
+          const identifier = item.imdb_id ?? sanitizeTitleForId(item.title);
+          const catalogId = `byw-${item.type}-${identifier}`;
+          const result = await generateSingleCatalog(
+            config, apiKey, watchHistory, item.type, "because-you-watched", item.title, new Set(usedTitleIds), alreadyRecommended, dismissedIds
+          );
+          const filteredItems = result.items.filter((i) => !dismissedIds.includes(i.id));
+          if (filteredItems.length > 0) {
+            await setCatalog(uuid, catalogId, filteredItems);
+            await saveRecommendationHistory(uuid, filteredItems, "byw");
+          }
+          const duration = Date.now() - startTime;
+          await logGeneration(uuid, "byw", item.type, filteredItems.length, duration);
+        } catch (err) {
+          const duration = Date.now() - startTime;
+          await logGeneration(uuid, "byw", item.type, 0, duration, err instanceof Error ? err.message : "Unknown error");
         }
-
-        const duration = Date.now() - startTime;
-        await logGeneration(uuid, "byw", item.type, filteredItems.length, duration);
-      } catch (err) {
-        const duration = Date.now() - startTime;
-        await logGeneration(uuid, "byw", item.type, 0, duration, err instanceof Error ? err.message : "Unknown error");
-        continue;
-      }
-    }
+      })
+    );
   } catch {
     // Background job failure is non-fatal
   } finally {

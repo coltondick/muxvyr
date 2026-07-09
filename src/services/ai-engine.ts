@@ -93,7 +93,7 @@ export async function generateRecommendations(
 async function enrichWatchHistory(
   watchHistory: WatchHistoryItem[]
 ): Promise<import("./prompt-builder.js").WatchHistoryDetail[]> {
-  const items = watchHistory.slice(0, 10);
+  const items = watchHistory.slice(0, 5);
 
   const results = await Promise.allSettled(
     items.map(async (item): Promise<import("./prompt-builder.js").WatchHistoryDetail> => {

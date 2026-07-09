@@ -9,6 +9,7 @@ import "dotenv/config";
 import { Worker } from "bullmq";
 import cron from "node-cron";
 import { pregenerateCatalogs, regenerateAllCatalogs } from "./services/catalog-pregenerate.js";
+import { prewarmCinemetaGlobal } from "./services/cinemeta-prewarm.js";
 
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 
@@ -66,6 +67,17 @@ cron.schedule("0 */6 * * *", async () => {
 
 console.log("🔧 BullMQ worker started. Listening for catalog-generation jobs...");
 console.log("⏰ Cron scheduled: regenerate all catalogs every 6 hours");
+
+// Prewarm Cinemeta cache on startup
+prewarmCinemetaGlobal().catch((err) => {
+  console.error("[prewarm] Failed:", err);
+});
+
+// Also prewarm daily at 3am
+cron.schedule("0 3 * * *", async () => {
+  console.log("[prewarm] Running daily Cinemeta prewarm...");
+  try { await prewarmCinemetaGlobal(); } catch (e) { console.error("[prewarm] Failed:", e); }
+});
 
 // Graceful shutdown
 process.on("SIGTERM", async () => {
