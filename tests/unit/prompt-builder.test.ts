@@ -21,16 +21,16 @@ describe("Prompt Builder", () => {
     it("includes all watch history titles in the prompt", () => {
       const prompt = buildSystemPrompt(baseContext);
 
-      expect(prompt).toContain("- Inception");
-      expect(prompt).toContain("- The Matrix");
-      expect(prompt).toContain("- Interstellar");
+      expect(prompt).toContain("Inception");
+      expect(prompt).toContain("The Matrix");
+      expect(prompt).toContain("Interstellar");
     });
 
     it("includes all watch history titles under the WATCH HISTORY section", () => {
       const prompt = buildSystemPrompt(baseContext);
 
-      expect(prompt).toContain("WATCH HISTORY:");
-      const watchSection = prompt.split("WATCH HISTORY:")[1].split("LANGUAGE:")[0];
+      expect(prompt).toContain("WATCH HISTORY");
+      const watchSection = prompt.split("WATCH HISTORY")[1].split("LANGUAGE")[0];
       expect(watchSection).toContain("Inception");
       expect(watchSection).toContain("The Matrix");
       expect(watchSection).toContain("Interstellar");
@@ -39,7 +39,7 @@ describe("Prompt Builder", () => {
     it("does not include BYW reference title instruction", () => {
       const prompt = buildSystemPrompt(baseContext);
 
-      expect(prompt).not.toContain("Focus recommendations on titles similar to:");
+      expect(prompt).not.toContain("REFERENCE TITLE:");
     });
   });
 
@@ -53,7 +53,7 @@ describe("Prompt Builder", () => {
 
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).toContain("Focus recommendations on titles similar to: Breaking Bad");
+      expect(prompt).toContain('REFERENCE TITLE: "Breaking Bad"');
     });
 
     it("does not include BYW instruction when referenceTitleForByw is missing", () => {
@@ -64,7 +64,7 @@ describe("Prompt Builder", () => {
 
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).not.toContain("Focus recommendations on titles similar to:");
+      expect(prompt).not.toContain("REFERENCE TITLE:");
     });
   });
 
@@ -72,7 +72,7 @@ describe("Prompt Builder", () => {
     it("lists all selected languages", () => {
       const prompt = buildSystemPrompt(baseContext);
 
-      expect(prompt).toContain("LANGUAGE: Recommend only titles available in: English, Spanish");
+      expect(prompt).toContain("LANGUAGE RESTRICTION: English, Spanish ONLY");
     });
 
     it("handles a single language", () => {
@@ -83,7 +83,7 @@ describe("Prompt Builder", () => {
 
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).toContain("LANGUAGE: Recommend only titles available in: French");
+      expect(prompt).toContain("LANGUAGE RESTRICTION: French ONLY");
     });
 
     it("handles multiple languages", () => {
@@ -94,7 +94,7 @@ describe("Prompt Builder", () => {
 
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).toContain("Recommend only titles available in: English, Spanish, French, German");
+      expect(prompt).toContain("English, Spanish, French, German ONLY");
     });
   });
 
@@ -194,33 +194,71 @@ describe("Prompt Builder", () => {
       expect(prompt).toContain("GENRE PREFERENCE");
       expect(prompt).toContain("FINE TUNING");
     });
+
+    it("includes already recommended section when provided", () => {
+      const context: PromptContext = {
+        ...baseContext,
+        alreadyRecommended: ["The Dark Knight", "Pulp Fiction"],
+      };
+
+      const prompt = buildSystemPrompt(context);
+
+      expect(prompt).toContain("ALREADY RECOMMENDED");
+      expect(prompt).toContain("The Dark Knight");
+      expect(prompt).toContain("Pulp Fiction");
+    });
+
+    it("does not include already recommended section when empty", () => {
+      const prompt = buildSystemPrompt(baseContext);
+
+      // The section header with the list should not appear (rule #11 will mention it generically)
+      expect(prompt).not.toContain("ALREADY RECOMMENDED (do NOT suggest these again):");
+    });
+
+    it("includes dismissed section when provided", () => {
+      const context: PromptContext = {
+        ...baseContext,
+        dismissedTitles: ["Bad Movie", "Boring Show"],
+      };
+
+      const prompt = buildSystemPrompt(context);
+
+      expect(prompt).toContain("DISMISSED BY USER");
+      expect(prompt).toContain("Bad Movie");
+      expect(prompt).toContain("Boring Show");
+    });
+
+    it("does not include dismissed section when empty", () => {
+      const prompt = buildSystemPrompt(baseContext);
+
+      expect(prompt).not.toContain("DISMISSED BY USER");
+    });
   });
 
   describe("output format section", () => {
     it("contains required OUTPUT FORMAT section", () => {
       const prompt = buildSystemPrompt(baseContext);
 
-      expect(prompt).toContain("OUTPUT FORMAT:");
+      expect(prompt).toContain("OUTPUT FORMAT");
       expect(prompt).toContain('"title"');
       expect(prompt).toContain('"type"');
       expect(prompt).toContain('"year"');
       expect(prompt).toContain('"reason"');
     });
 
-    it("contains RULES section", () => {
+    it("contains CRITICAL RULES section", () => {
       const prompt = buildSystemPrompt(baseContext);
 
-      expect(prompt).toContain("RULES:");
-      expect(prompt).toContain("Do not recommend titles already in the watch history");
+      expect(prompt).toContain("CRITICAL RULES:");
+      expect(prompt).toContain("NEVER recommend titles already in the watch history");
     });
   });
 
   describe("count behavior", () => {
-    it("defaults count to 10 when not specified", () => {
+    it("defaults count to 20 when not specified", () => {
       const prompt = buildSystemPrompt(baseContext);
 
-      expect(prompt).toContain("suggest 10 titles");
-      expect(prompt).toContain("Return exactly 10 recommendations");
+      expect(prompt).toContain("Return EXACTLY 20 unique recommendations");
     });
 
     it("uses custom count when specified", () => {
@@ -231,20 +269,47 @@ describe("Prompt Builder", () => {
 
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).toContain("suggest 5 titles");
-      expect(prompt).toContain("Return exactly 5 recommendations");
+      expect(prompt).toContain("Return EXACTLY 5 unique recommendations");
     });
 
-    it("uses custom count of 20", () => {
+    it("uses custom count of 30", () => {
       const context: PromptContext = {
         ...baseContext,
-        count: 20,
+        count: 30,
       };
 
       const prompt = buildSystemPrompt(context);
 
-      expect(prompt).toContain("suggest 20 titles");
-      expect(prompt).toContain("Return exactly 20 recommendations");
+      expect(prompt).toContain("Return EXACTLY 30 unique recommendations");
+    });
+  });
+
+  describe("recency markers", () => {
+    it("includes recency markers in watch history details", () => {
+      const context: PromptContext = {
+        ...baseContext,
+        watchHistoryDetails: [
+          { title: "Recent Movie", year: 2024, recencyMarker: "[CURRENT]" },
+          { title: "Last Month", year: 2023, recencyMarker: "[RECENT]" },
+          { title: "Old Movie", year: 2020 },
+        ],
+      };
+
+      const prompt = buildSystemPrompt(context);
+
+      expect(prompt).toContain('[CURRENT] "Recent Movie"');
+      expect(prompt).toContain('[RECENT] "Last Month"');
+      expect(prompt).toContain('"Old Movie"');
+      expect(prompt).not.toContain('[CURRENT] "Old Movie"');
+      expect(prompt).not.toContain('[RECENT] "Old Movie"');
+    });
+
+    it("includes note about weighting CURRENT and RECENT items", () => {
+      const prompt = buildSystemPrompt(baseContext);
+
+      expect(prompt).toContain("[CURRENT]");
+      expect(prompt).toContain("[RECENT]");
+      expect(prompt).toContain("Weight these MORE HEAVILY");
     });
   });
 });

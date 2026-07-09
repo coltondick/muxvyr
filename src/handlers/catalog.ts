@@ -15,6 +15,10 @@ import type { StremioMetaPreview } from "../services/metadata-resolver.js";
 import { getCatalog, setCatalog } from "../services/cache.js";
 import { formatCatalogResponse } from "../services/catalog-formatter.js";
 import { getEncryptionKey } from "../lib/config.js";
+import { getDismissedTitles } from "../services/recommendation-history.js";
+
+/** Page size for Stremio catalog pagination */
+const PAGE_SIZE = 20;
 
 /**
  * GET /{uuid}/catalog/{type}/{id}.json
@@ -33,13 +37,23 @@ export async function handleCatalog(c: Context): Promise<Response> {
     return c.json({ error: "Invalid catalog type" }, 400);
   }
 
+  // Parse skip parameter for pagination (Stremio sends ?skip=20)
+  const url = new URL(c.req.url);
+  const skip = parseInt(url.searchParams.get("skip") || "0", 10) || 0;
+
   const catalogId = id;
 
   // Check cache first
   try {
     const cached = await getCatalog(uuid, catalogId);
     if (cached !== null) {
-      const catalogData = formatCatalogResponse(cached);
+      // Filter out dismissed titles
+      const dismissedIds = await getDismissedTitles(uuid);
+      const filtered = cached.filter((item) => !dismissedIds.includes(item.id));
+
+      // Apply pagination
+      const paginated = filtered.slice(skip, skip + PAGE_SIZE);
+      const catalogData = formatCatalogResponse(paginated);
       return new Response(JSON.stringify(catalogData), {
         status: 200,
         headers: {
@@ -105,6 +119,7 @@ export async function handleCatalog(c: Context): Promise<Response> {
     catalogType,
     referenceTitleForByw,
     contentType: type as "movie" | "series",
+    count: 30,
   });
 
   apiKey = "";
@@ -126,6 +141,12 @@ export async function handleCatalog(c: Context): Promise<Response> {
     } catch { /* non-fatal */ }
   }
 
+  // Also exclude dismissed titles
+  const dismissedIds = await getDismissedTitles(uuid);
+  for (const did of dismissedIds) {
+    excludeIds.add(did);
+  }
+
   const resolvedMetas: StremioMetaPreview[] = [];
   for (const rec of filteredRecommendations) {
     try {
@@ -142,7 +163,9 @@ export async function handleCatalog(c: Context): Promise<Response> {
     await setCatalog(uuid, catalogId, resolvedMetas);
   } catch { /* non-fatal */ }
 
-  const catalogResponse = formatCatalogResponse(resolvedMetas);
+  // Apply pagination to fresh results
+  const paginated = resolvedMetas.slice(skip, skip + PAGE_SIZE);
+  const catalogResponse = formatCatalogResponse(paginated);
   return new Response(JSON.stringify(catalogResponse), {
     status: 200,
     headers: {

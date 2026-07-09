@@ -5,12 +5,14 @@
  */
 
 import type { Context } from "hono";
-import { pregenerateCatalogs } from "../services/catalog-pregenerate.js";
+import { pregenerateCatalogs, regenerateAllCatalogs } from "../services/catalog-pregenerate.js";
 import { getCatalog, invalidateUser, scanKeys } from "../services/cache.js";
 import { getConfiguration, listConfigurations, deleteConfiguration } from "../services/configuration.js";
 import { decrypt, importKey } from "../services/encryption.js";
 import { fetchWatchHistory } from "../services/nuvio-sync.js";
 import { getAdminPassword, getEncryptionKey } from "../lib/config.js";
+import { query } from "../lib/db.js";
+import { catalogQueue } from "../lib/queue.js";
 
 function checkAuth(c: Context): Response | null {
   const expected = getAdminPassword();
@@ -96,6 +98,74 @@ export async function handleAdminDeleteUser(c: Context): Promise<Response> {
   return c.json({ success: true, message: "User deleted" });
 }
 
+/**
+ * POST /admin/api/regenerate-all — triggers regeneration for all users.
+ */
+export async function handleAdminRegenerateAll(c: Context): Promise<Response> {
+  const authErr = checkAuth(c);
+  if (authErr) return authErr;
+  try {
+    // Run in background, don't await
+    regenerateAllCatalogs().catch(() => {});
+    return c.json({ success: true, message: "Regeneration triggered for all users" });
+  } catch {
+    return c.json({ error: "Failed to trigger regeneration" }, 500);
+  }
+}
+
+/**
+ * GET /admin/api/queue-status — returns BullMQ queue counts.
+ */
+export async function handleAdminQueueStatus(c: Context): Promise<Response> {
+  const authErr = checkAuth(c);
+  if (authErr) return authErr;
+  try {
+    const [waiting, active, completed, failed] = await Promise.all([
+      catalogQueue.getWaitingCount(),
+      catalogQueue.getActiveCount(),
+      catalogQueue.getCompletedCount(),
+      catalogQueue.getFailedCount(),
+    ]);
+    return c.json({ waiting, active, completed, failed });
+  } catch {
+    return c.json({ error: "Failed to fetch queue status" }, 500);
+  }
+}
+
+/**
+ * GET /admin/api/logs/:uuid — returns recent generation logs for a user.
+ */
+export async function handleAdminUserLogs(c: Context): Promise<Response> {
+  const authErr = checkAuth(c);
+  if (authErr) return authErr;
+  const uuid = c.req.param("uuid") ?? "";
+  try {
+    const result = await query(
+      `SELECT * FROM generation_logs WHERE user_uuid = $1 ORDER BY created_at DESC LIMIT 50`,
+      [uuid]
+    );
+    return c.json(result.rows);
+  } catch {
+    return c.json({ error: "Failed to fetch logs" }, 500);
+  }
+}
+
+/**
+ * GET /admin/api/logs — returns recent generation logs for all users.
+ */
+export async function handleAdminAllLogs(c: Context): Promise<Response> {
+  const authErr = checkAuth(c);
+  if (authErr) return authErr;
+  try {
+    const result = await query(
+      `SELECT * FROM generation_logs ORDER BY created_at DESC LIMIT 50`
+    );
+    return c.json(result.rows);
+  } catch {
+    return c.json({ error: "Failed to fetch logs" }, 500);
+  }
+}
+
 const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -119,8 +189,9 @@ h4{color:#c4b5fd;font-size:0.88rem;font-weight:600;margin:14px 0 8px}
 .btn-red{background:linear-gradient(135deg,#ef4444,#dc2626)}
 .btn-green{background:linear-gradient(135deg,#22c55e,#16a34a)}
 .btn-ghost{background:none;border:1px solid rgba(99,102,241,0.3);color:#a5b4fc}
-.btn-icon{background:none;border:none;cursor:pointer;font-size:1.2rem;padding:4px 8px;border-radius:6px;transition:background 0.2s;color:#a5b4fc}
-.btn-icon:hover{background:rgba(99,102,241,0.15)}
+.btn-icon{background:none;border:1px solid rgba(99,102,241,0.25);cursor:pointer;font-size:0.8rem;padding:6px 10px;border-radius:8px;transition:all 0.2s;color:#a5b4fc;display:inline-flex;align-items:center;gap:4px}
+.btn-icon:hover{background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.4)}
+.btn-icon svg{width:14px;height:14px;fill:currentColor}
 .tbl-wrap{overflow-x:auto;border-radius:12px;border:1px solid rgba(99,102,241,0.1);background:rgba(20,20,45,0.5);backdrop-filter:blur(8px)}
 table{width:100%;border-collapse:collapse}
 th,td{padding:10px 12px;text-align:left;font-size:0.8rem;white-space:nowrap}
@@ -160,6 +231,15 @@ tr:hover td{background:rgba(99,102,241,0.03)}
 .loading{color:#94a3b8;font-size:0.82rem;padding:12px 0;display:flex;align-items:center;gap:8px}
 .loading::before{content:'';width:14px;height:14px;border:2px solid rgba(99,102,241,0.3);border-top-color:#6366f1;border-radius:50%;animation:spin 0.7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.queue-status{display:inline-flex;gap:12px;font-size:0.75rem;color:#94a3b8;margin-left:12px}
+.queue-status span{display:inline-flex;align-items:center;gap:4px}
+.queue-status .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.queue-status .dot-w{background:#f59e0b}
+.queue-status .dot-a{background:#22c55e}
+.log-item{padding:8px 10px;border-bottom:1px solid rgba(99,102,241,0.05);font-size:0.78rem}
+.log-item .log-type{color:#a5b4fc;font-weight:600}
+.log-item .log-time{color:#64748b;font-size:0.7rem}
+.log-item .log-err{color:#fca5a5;font-size:0.72rem}
 @media(max-width:768px){.wrap{padding:16px 12px}th,td{padding:7px 8px;font-size:0.72rem}.actions{flex-direction:column;gap:3px}}
 </style>
 </head>
@@ -193,15 +273,27 @@ api('/admin/api/users').then(function(d){
 if(d.error){toast(d.error,'err');return}
 document.getElementById('login-view').style.display='none';
 document.getElementById('app').style.display='block';
-var h='<div class="tbl-wrap"><table><thead><tr><th>UUID</th><th>Provider</th><th>Languages</th><th>Countries</th><th>Updated</th><th>Actions</th></tr></thead><tbody>';
+var h='<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px"><button class="btn btn-green" onclick="regenerateAll()">Regenerate All Users</button><div class="queue-status" id="queue-status"></div></div>';
+h+='<div class="tbl-wrap"><table><thead><tr><th>UUID</th><th>Provider</th><th>Languages</th><th>Countries</th><th>Updated</th><th>Actions</th></tr></thead><tbody>';
 d.forEach(function(u){
 h+='<tr><td><span class="mono">'+u.uuid.slice(0,8)+'\\u2026</span></td><td>'+u.ai_provider+'</td><td>'+((u.languages||[]).join(', ')||'\\u2014')+'</td><td>'+((u.country_filter||[]).join(', ')||'\\u2014')+'</td><td>'+new Date(u.updated_at).toLocaleDateString()+'</td><td><div class="actions"><button class="btn btn-sm btn-ghost" onclick="viewUser(\\''+u.uuid+'\\')">View</button><button class="btn btn-sm btn-green" onclick="refresh(\\''+u.uuid+'\\')">Refresh</button><button class="btn btn-sm btn-red" onclick="openDel(\\''+u.uuid+'\\')">Delete</button></div></td></tr>';
 });
 h+='</tbody></table></div>';
 document.getElementById('app').innerHTML=h;
 toast('Loaded '+d.length+' user(s)','ok');
+loadQueueStatus();
 })
 }
+
+function loadQueueStatus(){
+api('/admin/api/queue-status').then(function(d){
+if(d.error)return;
+var el=document.getElementById('queue-status');
+if(el)el.innerHTML='<span><span class="dot dot-w"></span>Waiting: '+d.waiting+'</span><span><span class="dot dot-a"></span>Active: '+d.active+'</span><span>Done: '+d.completed+'</span><span>Failed: '+d.failed+'</span>';
+})
+}
+
+function regenerateAll(){toast('Triggering regeneration for all users\\u2026','ok');api('/admin/api/regenerate-all',{method:'POST'}).then(function(d){toast(d.success?'Regeneration triggered!':'Error: '+(d.message||d.error),d.success?'ok':'err')})}
 
 function openDel(uuid){delUuid=uuid;document.getElementById('del-uuid').textContent=uuid;document.getElementById('del-overlay').classList.add('show');document.getElementById('del-confirm').onclick=function(){confirmDel()}}
 function closeModal(){document.getElementById('del-overlay').classList.remove('show');delUuid=''}
@@ -209,12 +301,12 @@ function confirmDel(){if(!delUuid)return;closeModal();toast('Deleting\\u2026','o
 
 function viewUser(uuid){
 var p=document.getElementById('panel');
-p.innerHTML='<div class="card"><div class="card-hdr"><h3>'+uuid.slice(0,8)+'\\u2026</h3><div><button class="btn-icon" title="Refresh data" onclick="viewUser(\\''+uuid+'\\')">\\ud83d\\udd04</button><button class="btn btn-sm btn-green" onclick="refresh(\\''+uuid+'\\')">Regenerate</button></div></div><div class="tabs"><button class="tab on" onclick="switchTab(this,\\'recs\\',\\''+uuid+'\\')">Catalogs</button><button class="tab" onclick="switchTab(this,\\'history\\',\\''+uuid+'\\')">Watch History</button></div><div id="detail"><div class="loading">Loading\\u2026</div></div></div>';
+p.innerHTML='<div class="card"><div class="card-hdr"><h3>'+uuid.slice(0,8)+'\\u2026</h3><div style="display:flex;gap:8px;align-items:center"><button class="btn-icon" title="Refresh panel" onclick="viewUser(\\''+uuid+'\\')"><svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.96 7.96 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>Refresh</button><button class="btn btn-sm btn-green" onclick="refresh(\\''+uuid+'\\')">Regenerate All</button><button class="btn btn-sm btn-ghost" onclick="clearCache(\\''+uuid+'\\')">Clear Cache</button><button class="btn btn-sm btn-ghost" onclick="copyUuid(\\''+uuid+'\\')">Copy UUID</button></div></div><div class="tabs"><button class="tab on" onclick="switchTab(this,\\'recs\\',\\''+uuid+'\\')">Catalogs</button><button class="tab" onclick="switchTab(this,\\'history\\',\\''+uuid+'\\')">Watch History</button><button class="tab" onclick="switchTab(this,\\'logs\\',\\''+uuid+'\\')">Logs</button><button class="tab" onclick="switchTab(this,\\'config\\',\\''+uuid+'\\')">Config</button></div><div id="detail"><div class="loading">Loading\\u2026</div></div></div>';
 loadRecs(uuid);
 p.scrollIntoView({behavior:'smooth'});
 }
 
-function switchTab(el,tab,uuid){el.parentElement.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on')});el.classList.add('on');if(tab==='recs')loadRecs(uuid);else loadHistory(uuid)}
+function switchTab(el,tab,uuid){el.parentElement.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on')});el.classList.add('on');if(tab==='recs')loadRecs(uuid);else if(tab==='history')loadHistory(uuid);else if(tab==='logs')loadLogs(uuid);else loadConfig(uuid)}
 
 function loadRecs(uuid){
 var el=document.getElementById('detail');el.innerHTML='<div class="loading">Loading catalogs\\u2026</div>';
@@ -243,13 +335,48 @@ d.watchHistory.forEach(function(w){h+='<div class="item"><div class="ph">\\ud83c
 el.innerHTML=h;
 })}
 
+function loadLogs(uuid){
+var el=document.getElementById('detail');el.innerHTML='<div class="loading">Loading generation logs\\u2026</div>';
+api('/admin/api/logs/'+uuid).then(function(d){
+if(d.error){el.innerHTML='<div class="empty" style="color:#fca5a5">'+d.error+'</div>';return}
+if(!d||!d.length){el.innerHTML='<div class="empty">No generation logs yet</div>';return}
+var h='<h4>Generation Logs ('+d.length+')</h4>';
+d.forEach(function(l){
+h+='<div class="log-item"><span class="log-type">'+esc(l.catalog_type)+'</span> '+(l.content_type||'')+' \\u2022 '+l.items_generated+' items \\u2022 '+(l.duration_ms||0)+'ms <span class="log-time">'+new Date(l.created_at).toLocaleString()+'</span>';
+if(l.error)h+='<br><span class="log-err">\\u26a0 '+esc(l.error)+'</span>';
+h+='</div>';
+});
+el.innerHTML=h;
+})}
+
 function items(arr){
 if(!arr||!arr.length)return'<div class="empty">No items cached</div>';
 var h='';arr.forEach(function(m){h+='<div class="item">'+(m.poster?'<img src="'+ea(m.poster)+'" loading="lazy">':'<div class="ph">\\ud83c\\udfac</div>')+'<div><span class="t">'+esc(m.name||'?')+'</span><br><span class="m">'+(m.id||'')+(m.releaseInfo?' \\u2022 '+m.releaseInfo:'')+'</span></div></div>'});
 return h;
 }
 
-function refresh(uuid){toast('Regenerating\\u2026','ok');api('/admin/api/refresh/'+uuid,{method:'POST'}).then(function(d){toast(d.success?'Done!':'Error: '+(d.message||d.error),d.success?'ok':'err')})}
+function refresh(uuid){toast('Regenerating all catalogs\\u2026','ok');api('/admin/api/refresh/'+uuid,{method:'POST'}).then(function(d){toast(d.success?'All catalogs regenerated!':'Error: '+(d.message||d.error),d.success?'ok':'err')})}
+
+function clearCache(uuid){api('/admin/api/refresh/'+uuid,{method:'POST'}).then(function(){toast('Cache cleared & regenerated','ok')})}
+function copyUuid(uuid){navigator.clipboard.writeText(uuid).then(function(){toast('UUID copied','ok')})}
+
+function loadConfig(uuid){
+var el=document.getElementById('detail');el.innerHTML='<div class="loading">Loading config\\u2026</div>';
+api('/admin/api/users').then(function(users){
+var u=users.find(function(x){return x.uuid===uuid});
+if(!u){el.innerHTML='<div class="empty">Not found</div>';return}
+var h='<h4>Configuration Details</h4>';
+h+='<table style="font-size:0.8rem"><tr><td style="color:#a5b4fc;width:140px">UUID</td><td class="mono">'+u.uuid+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Provider</td><td>'+u.ai_provider+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Languages</td><td>'+((u.languages||[]).join(', ')||'\\u2014')+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Countries</td><td>'+((u.country_filter||[]).join(', ')||'\\u2014')+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Genre Exclusions</td><td>'+((u.genre_exclusions||[]).join(', ')||'\\u2014')+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Genre Preferences</td><td>'+((u.genre_preferences||[]).join(', ')||'\\u2014')+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Fine Tuning</td><td>'+(u.fine_tuning_params||'\\u2014')+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Created</td><td>'+new Date(u.created_at).toLocaleString()+'</td></tr>';
+h+='<tr><td style="color:#a5b4fc">Updated</td><td>'+new Date(u.updated_at).toLocaleString()+'</td></tr></table>';
+el.innerHTML=h;
+})}
 
 function esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
 function ea(s){return(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}

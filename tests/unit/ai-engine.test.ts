@@ -16,6 +16,17 @@ import { generateRecommendations, RecommendationContext } from "../../src/servic
 import type { WatchHistoryItem } from "../../src/services/nuvio-sync";
 import type { RecommendedTitle } from "../../src/services/ai-providers/types";
 
+// Mock Redis to prevent connection attempts in unit tests
+vi.mock("../../src/lib/redis", () => ({
+  redis: {
+    get: vi.fn(async () => null),
+    setex: vi.fn(async () => "OK"),
+    set: vi.fn(async () => "OK"),
+    del: vi.fn(async () => 1),
+    ping: vi.fn(async () => "PONG"),
+  },
+}));
+
 const MOCK_WATCH_HISTORY: WatchHistoryItem[] = [
   { title: "Inception", type: "movie", year: 2010, watched_at: "2024-01-01T00:00:00Z" },
   { title: "Breaking Bad", type: "series", year: 2008, watched_at: "2024-01-02T00:00:00Z" },
@@ -71,7 +82,7 @@ describe("AI Recommendation Engine Orchestrator", () => {
       await generateRecommendations(context);
 
       expect(capturedUrl).toBe(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
       );
     });
 
@@ -203,7 +214,7 @@ describe("AI Recommendation Engine Orchestrator", () => {
 
       const body = JSON.parse(capturedBody);
       const prompt = body.messages[0].content;
-      expect(prompt).toContain("similar to: Inception");
+      expect(prompt).toContain('REFERENCE TITLE: "Inception"');
     });
   });
 

@@ -16,6 +16,7 @@ export interface WatchHistoryDetail {
   description?: string;
   genres?: string[];
   year?: number;
+  recencyMarker?: string;
 }
 
 export interface PromptContext {
@@ -43,6 +44,10 @@ export interface PromptContext {
   contentType?: "movie" | "series";
   /** Number of recommendations to request (default: 20) */
   count?: number;
+  /** Previously recommended titles to avoid repeats */
+  alreadyRecommended?: string[];
+  /** Dismissed/disliked titles to never recommend */
+  dismissedTitles?: string[];
 }
 
 /**
@@ -58,11 +63,13 @@ export function buildSystemPrompt(context: PromptContext): string {
   const count = context.count ?? 20;
   const languages = context.languages.join(", ");
 
-  // Build rich watch history section with descriptions and genres
+  // Build rich watch history section with descriptions, genres, and recency markers
   let watchHistorySection: string;
   if (context.watchHistoryDetails && context.watchHistoryDetails.length > 0) {
     watchHistorySection = context.watchHistoryDetails.map((item) => {
-      let entry = `- "${item.title}"`;
+      let entry = `- `;
+      if (item.recencyMarker) entry += `${item.recencyMarker} `;
+      entry += `"${item.title}"`;
       if (item.year) entry += ` (${item.year})`;
       if (item.genres && item.genres.length > 0) entry += ` [${item.genres.join(", ")}]`;
       if (item.description) entry += `\n  Synopsis: ${item.description.slice(0, 150)}`;
@@ -76,6 +83,8 @@ export function buildSystemPrompt(context: PromptContext): string {
   const genreExclusionSection = buildGenreExclusionSection(context.genreExclusions);
   const genrePreferenceSection = buildGenrePreferenceSection(context.genrePreferences);
   const fineTuningSection = buildFineTuningSection(context.fineTuningParams);
+  const alreadyRecommendedSection = buildAlreadyRecommendedSection(context.alreadyRecommended);
+  const dismissedSection = buildDismissedSection(context.dismissedTitles);
 
   // Build BYW section with rich description
   let bywSection = "";
@@ -96,8 +105,10 @@ export function buildSystemPrompt(context: PromptContext): string {
 WATCH HISTORY (what the user has recently watched):
 ${watchHistorySection}
 
+NOTE: Items marked [CURRENT] were watched in the last 7 days. Items marked [RECENT] were watched in the last 30 days. Weight these MORE HEAVILY when choosing recommendations — they reflect the user's current mood and interests.
+
 LANGUAGE RESTRICTION: ${languages} ONLY.${contentTypeInstruction}
-${countryFilterSection}${genreExclusionSection}${genrePreferenceSection}${fineTuningSection}${bywSection}
+${countryFilterSection}${genreExclusionSection}${genrePreferenceSection}${fineTuningSection}${alreadyRecommendedSection}${dismissedSection}${bywSection}
 CRITICAL RULES:
 1. Return EXACTLY ${count} unique recommendations as a JSON array
 2. Each item must have: title, type ("${context.contentType || "movie or series"}"), year (integer)
@@ -109,6 +120,7 @@ CRITICAL RULES:
 8. Recommendations must be THEMATICALLY related to the watch history — match the tone, subject matter, humor style, and target audience, not just the genre label
 9. Include a mix of popular well-known titles AND hidden gems the user likely hasn't seen
 10. Every recommendation must be a REAL title that actually exists
+11. NEVER recommend titles from the ALREADY RECOMMENDED or DISMISSED lists
 
 OUTPUT FORMAT (valid JSON array, nothing else):
 [{"title": "...", "type": "${context.contentType || "movie"}", "year": 2024, "reason": "Brief explanation of why this matches"}]`;
@@ -156,4 +168,24 @@ function buildFineTuningSection(fineTuningParams?: string): string {
   return `\nFINE TUNING: ${fineTuningParams}\n`;
 }
 
-// buildBywSection is now inline in the main prompt builder
+/**
+ * Builds the ALREADY RECOMMENDED section to prevent repeats.
+ */
+function buildAlreadyRecommendedSection(alreadyRecommended?: string[]): string {
+  if (!alreadyRecommended || alreadyRecommended.length === 0) {
+    return "";
+  }
+  const titles = alreadyRecommended.slice(0, 50).join(", ");
+  return `\nALREADY RECOMMENDED (do NOT suggest these again): ${titles}\n`;
+}
+
+/**
+ * Builds the DISMISSED section for titles the user disliked.
+ */
+function buildDismissedSection(dismissedTitles?: string[]): string {
+  if (!dismissedTitles || dismissedTitles.length === 0) {
+    return "";
+  }
+  const titles = dismissedTitles.join(", ");
+  return `\nDISMISSED BY USER (NEVER recommend these): ${titles}\n`;
+}

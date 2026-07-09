@@ -11,6 +11,11 @@ import type { WatchHistoryItem } from "./nuvio-sync.js";
 import type { RecommendedTitle } from "./ai-providers/types.js";
 import { buildSystemPrompt } from "./prompt-builder.js";
 import { getProvider } from "./ai-providers/index.js";
+import { redis } from "../lib/redis.js";
+import crypto from "node:crypto";
+
+/** Cache TTL for Cinemeta enrichment: 7 days */
+const ENRICH_CACHE_TTL = 604800;
 
 /**
  * Context required for generating AI recommendations.
@@ -27,6 +32,12 @@ export interface RecommendationContext {
   catalogType: "general" | "because-you-watched";
   referenceTitleForByw?: string;
   contentType?: "movie" | "series";
+  /** Previously recommended titles to avoid (from recommendation history) */
+  alreadyRecommended?: string[];
+  /** Dismissed/disliked titles to exclude */
+  dismissedTitles?: string[];
+  /** Number of items to generate (default 20) */
+  count?: number;
 }
 
 /**
@@ -65,6 +76,9 @@ export async function generateRecommendations(
       referenceTitleForByw: context.referenceTitleForByw,
       referenceTitleDescription,
       contentType: context.contentType,
+      alreadyRecommended: context.alreadyRecommended,
+      dismissedTitles: context.dismissedTitles,
+      count: context.count,
     });
 
     const adapter = getProvider(context.provider);
@@ -84,10 +98,12 @@ async function enrichWatchHistory(
   const results = await Promise.allSettled(
     items.map(async (item): Promise<import("./prompt-builder.js").WatchHistoryDetail> => {
       const meta = await fetchCinemetaDetails(item.title, item.type);
+      // Compute recency marker
+      const recencyMarker = getRecencyMarker(item.watched_at);
       if (meta) {
-        return { title: item.title, description: meta.description, genres: meta.genres, year: item.year };
+        return { title: item.title, description: meta.description, genres: meta.genres, year: item.year, recencyMarker };
       }
-      return { title: item.title, year: item.year };
+      return { title: item.title, year: item.year, recencyMarker };
     })
   );
 
@@ -96,10 +112,39 @@ async function enrichWatchHistory(
     .map((r) => r.value);
 }
 
+/**
+ * Returns a recency marker based on when the item was watched.
+ */
+function getRecencyMarker(watchedAt: string): string | undefined {
+  const watchedDate = new Date(watchedAt);
+  const now = Date.now();
+  const daysSince = (now - watchedDate.getTime()) / (1000 * 60 * 60 * 24);
+
+  if (daysSince <= 7) return "[CURRENT]";
+  if (daysSince <= 30) return "[RECENT]";
+  return undefined;
+}
+
+/**
+ * Fetches Cinemeta details with Redis caching (7-day TTL).
+ */
 async function fetchCinemetaDetails(
   title: string,
   type: "movie" | "series"
 ): Promise<{ description?: string; genres?: string[] } | null> {
+  // Check Redis cache first
+  const titleHash = crypto.createHash("md5").update(`${type}:${title.toLowerCase()}`).digest("hex");
+  const cacheKey = `meta:enrich:${type}:${titleHash}`;
+
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached) as { description?: string; genres?: string[] };
+    }
+  } catch {
+    // Cache read failed, proceed with fetch
+  }
+
   try {
     const query = encodeURIComponent(title);
     const response = await fetch(
@@ -117,10 +162,19 @@ async function fetchCinemetaDetails(
       (m) => m.name.toLowerCase() === title.toLowerCase()
     ) || data.metas[0];
 
-    return {
+    const result = {
       description: match.description || undefined,
       genres: match.genres || undefined,
     };
+
+    // Store in Redis cache with 7-day TTL
+    try {
+      await redis.setex(cacheKey, ENRICH_CACHE_TTL, JSON.stringify(result));
+    } catch {
+      // Non-fatal
+    }
+
+    return result;
   } catch {
     return null;
   }

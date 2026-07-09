@@ -41,7 +41,7 @@ describe("manifest-builder", () => {
       expect(manifest.description).toEqual(
         expect.stringContaining("AI-powered")
       );
-      expect(manifest.resources).toEqual(["catalog"]);
+      expect(manifest.resources).toEqual(["catalog", { name: "meta", types: ["movie", "series"], idPrefixes: ["tt"] }]);
       expect(manifest.types).toEqual(["movie", "series"]);
       expect(manifest.catalogs).toBeDefined();
       expect(Array.isArray(manifest.catalogs)).toBe(true);

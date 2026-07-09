@@ -17,6 +17,15 @@ import type { RecommendedTitle } from "./ai-providers/types.js";
 import { setCatalog } from "./cache.js";
 import { getEncryptionKey } from "../lib/config.js";
 import { query } from "../lib/db.js";
+import { redis } from "../lib/redis.js";
+import {
+  getRecommendationHistoryTitles,
+  saveRecommendationHistory,
+  getDismissedTitles,
+} from "./recommendation-history.js";
+
+/** Lock duration for deduplication: 5 minutes */
+const GENERATION_LOCK_TTL = 300;
 
 /**
  * Resolves metadata for a list of recommended titles in parallel (batch of 5).
@@ -42,6 +51,53 @@ async function resolveMetadataBatch(
 }
 
 /**
+ * Attempts to acquire a generation lock for a user.
+ * Returns true if lock acquired, false if already in progress.
+ */
+async function acquireGenerationLock(uuid: string): Promise<boolean> {
+  try {
+    const result = await redis.set(`lock:gen:${uuid}`, "1", "EX", GENERATION_LOCK_TTL, "NX");
+    return result === "OK";
+  } catch {
+    // If Redis fails, proceed anyway
+    return true;
+  }
+}
+
+/**
+ * Releases the generation lock for a user.
+ */
+async function releaseGenerationLock(uuid: string): Promise<void> {
+  try {
+    await redis.del(`lock:gen:${uuid}`);
+  } catch {
+    // Non-fatal
+  }
+}
+
+/**
+ * Logs a generation event to the database.
+ */
+async function logGeneration(
+  uuid: string,
+  catalogType: string,
+  contentType: string | null,
+  itemsGenerated: number,
+  durationMs: number,
+  error?: string
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO generation_logs (user_uuid, catalog_type, content_type, items_generated, duration_ms, error)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [uuid, catalogType, contentType, itemsGenerated, durationMs, error || null]
+    );
+  } catch {
+    // Non-fatal
+  }
+}
+
+/**
  * Generates a single catalog (AI call + metadata resolution).
  */
 async function generateSingleCatalog(
@@ -58,7 +114,9 @@ async function generateSingleCatalog(
   contentType: "movie" | "series",
   catalogType: "general" | "because-you-watched",
   referenceTitleForByw?: string,
-  excludeIds?: Set<string>
+  excludeIds?: Set<string>,
+  alreadyRecommended?: string[],
+  dismissedTitles?: string[]
 ): Promise<{ items: StremioMetaPreview[]; ids: Set<string> }> {
   const exclude = excludeIds || new Set<string>();
 
@@ -74,6 +132,9 @@ async function generateSingleCatalog(
     catalogType,
     referenceTitleForByw,
     contentType,
+    alreadyRecommended,
+    dismissedTitles,
+    count: 30,
   });
 
   if (!recommendations) return { items: [], ids: exclude };
@@ -89,6 +150,13 @@ async function generateSingleCatalog(
  * No time limits in the self-hosted version — generates ALL catalogs including BYW.
  */
 export async function pregenerateCatalogs(uuid: string): Promise<void> {
+  // Acquire deduplication lock
+  const lockAcquired = await acquireGenerationLock(uuid);
+  if (!lockAcquired) {
+    console.log(`[pregenerate] Skipping ${uuid} — generation already in progress`);
+    return;
+  }
+
   try {
     const config = await getConfiguration(uuid);
     if (!config) return;
@@ -100,38 +168,75 @@ export async function pregenerateCatalogs(uuid: string): Promise<void> {
     const watchHistory = await fetchWatchHistory(nuvioCredentials, uuid);
     const usedTitleIds = new Set<string>();
 
+    // Load recommendation history and dismissed titles for prompt
+    const alreadyRecommended = await getRecommendationHistoryTitles(uuid, 50);
+    const dismissedIds = await getDismissedTitles(uuid);
+
     // Generate movie and series catalogs sequentially
     for (const contentType of ["movie", "series"] as const) {
+      const startTime = Date.now();
       try {
         const result = await generateSingleCatalog(
-          config, apiKey, watchHistory, contentType, "general", undefined, usedTitleIds
+          config, apiKey, watchHistory, contentType, "general", undefined, usedTitleIds, alreadyRecommended, dismissedIds
         );
-        if (result.items.length > 0) {
-          await setCatalog(uuid, `ai-recommendations-${contentType}`, result.items);
+
+        // Filter out dismissed titles from results
+        const filteredItems = result.items.filter((item) => !dismissedIds.includes(item.id));
+
+        if (filteredItems.length > 0) {
+          await setCatalog(uuid, `ai-recommendations-${contentType}`, filteredItems);
+          // Save to recommendation history
+          await saveRecommendationHistory(uuid, filteredItems, "general");
         }
-      } catch {
+
+        const duration = Date.now() - startTime;
+        await logGeneration(uuid, "general", contentType, filteredItems.length, duration);
+      } catch (err) {
+        const duration = Date.now() - startTime;
+        await logGeneration(uuid, "general", contentType, 0, duration, err instanceof Error ? err.message : "Unknown error");
         continue;
       }
     }
 
-    // Generate BYW catalogs for the 5 most recent watch history items (no time limits!)
-    const recentItems = watchHistory.slice(0, 5);
+    // Generate BYW catalogs for the 4 most recent unique watch history items
+    const seenTitles = new Set<string>();
+    const recentItems: typeof watchHistory = [];
+    for (const item of watchHistory) {
+      if (!seenTitles.has(item.title) && recentItems.length < 4) {
+        seenTitles.add(item.title);
+        recentItems.push(item);
+      }
+    }
     for (const item of recentItems) {
+      const startTime = Date.now();
       try {
         const identifier = item.imdb_id ?? sanitizeTitleForId(item.title);
         const catalogId = `byw-${item.type}-${identifier}`;
         const result = await generateSingleCatalog(
-          config, apiKey, watchHistory, item.type, "because-you-watched", item.title, usedTitleIds
+          config, apiKey, watchHistory, item.type, "because-you-watched", item.title, usedTitleIds, alreadyRecommended, dismissedIds
         );
-        if (result.items.length > 0) {
-          await setCatalog(uuid, catalogId, result.items);
+
+        // Filter out dismissed titles
+        const filteredItems = result.items.filter((i) => !dismissedIds.includes(i.id));
+
+        if (filteredItems.length > 0) {
+          await setCatalog(uuid, catalogId, filteredItems);
+          // Save to recommendation history
+          await saveRecommendationHistory(uuid, filteredItems, "byw");
         }
-      } catch {
+
+        const duration = Date.now() - startTime;
+        await logGeneration(uuid, "byw", item.type, filteredItems.length, duration);
+      } catch (err) {
+        const duration = Date.now() - startTime;
+        await logGeneration(uuid, "byw", item.type, 0, duration, err instanceof Error ? err.message : "Unknown error");
         continue;
       }
     }
   } catch {
     // Background job failure is non-fatal
+  } finally {
+    await releaseGenerationLock(uuid);
   }
 }
 
