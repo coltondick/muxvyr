@@ -1,0 +1,187 @@
+/**
+ * Landing Page Frontend
+ *
+ * Returns self-contained HTML for the landing page with
+ * Material Design 3 styling consistent with the configure page.
+ *
+ * @module frontend/landing
+ * @requirements 1.1
+ */
+
+/**
+ * Returns the complete HTML string for the landing page.
+ *
+ * @returns Complete HTML page string
+ */
+export function getLandingHtml(): string {
+  return LANDING_HTML;
+}
+
+const LANDING_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Recommendations for Stremio</title>
+  <style>
+    :root {
+      --md-primary: #6750A4;
+      --md-on-primary: #FFFFFF;
+      --md-primary-container: #EADDFF;
+      --md-on-primary-container: #21005D;
+      --md-secondary: #625B71;
+      --md-on-secondary: #FFFFFF;
+      --md-secondary-container: #E8DEF8;
+      --md-surface: #FFFBFE;
+      --md-surface-variant: #E7E0EC;
+      --md-on-surface: #1C1B1F;
+      --md-on-surface-variant: #49454F;
+      --md-outline: #79747E;
+      --md-outline-variant: #CAC4D0;
+      --md-elevation-1: 0 1px 3px 1px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.3);
+      --md-elevation-2: 0 2px 6px 2px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.3);
+      --md-shape-large: 16px;
+      --md-shape-extra-large: 28px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--md-surface);
+      color: var(--md-on-surface);
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-bar {
+      background-color: var(--md-primary);
+      color: var(--md-on-primary);
+      padding: 16px 24px;
+      box-shadow: var(--md-elevation-2);
+    }
+
+    .app-bar h1 { font-size: 22px; font-weight: 400; }
+
+    .hero {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 16px;
+    }
+
+    .hero-card {
+      max-width: 560px;
+      width: 100%;
+      background: var(--md-surface);
+      border-radius: var(--md-shape-large);
+      box-shadow: var(--md-elevation-2);
+      padding: 48px 40px;
+      text-align: center;
+      border: 1px solid var(--md-outline-variant);
+    }
+
+    .hero-icon { font-size: 64px; margin-bottom: 24px; display: block; }
+
+    .hero-card h2 {
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--md-on-surface);
+      margin-bottom: 16px;
+      letter-spacing: -0.25px;
+    }
+
+    .hero-card p {
+      font-size: 16px;
+      color: var(--md-on-surface-variant);
+      margin-bottom: 12px;
+      line-height: 1.6;
+    }
+
+    .features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      margin: 24px 0 32px;
+    }
+
+    .feature-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: var(--md-secondary-container);
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--md-on-surface);
+      font-weight: 500;
+    }
+
+    .feature-chip .icon { font-size: 16px; }
+
+    .cta-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px 32px;
+      font-size: 16px;
+      font-weight: 500;
+      letter-spacing: 0.1px;
+      border-radius: var(--md-shape-extra-large);
+      border: none;
+      cursor: pointer;
+      background-color: var(--md-primary);
+      color: var(--md-on-primary);
+      text-decoration: none;
+      transition: box-shadow 0.2s, opacity 0.2s;
+      gap: 8px;
+    }
+
+    .cta-btn:hover { box-shadow: var(--md-elevation-1); opacity: 0.92; }
+
+    .footer-note { margin-top: 24px; font-size: 13px; color: var(--md-on-surface-variant); }
+
+    @media (max-width: 600px) {
+      .hero-card { padding: 32px 20px; }
+      .hero-card h2 { font-size: 22px; }
+      .hero-card p { font-size: 14px; }
+      .cta-btn { width: 100%; padding: 14px 24px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <h1>AI Recommendations for Stremio</h1>
+  </header>
+
+  <main class="hero">
+    <div class="hero-card">
+      <span class="hero-icon" aria-hidden="true">&#127916;</span>
+      <h2>AI-Powered Recommendations</h2>
+      <p>
+        Get personalized movie and series recommendations powered by AI,
+        based on your Nuvio Sync watch history. Choose your preferred AI
+        provider, configure your preferences, and discover content tailored
+        to your taste &mdash; directly inside Stremio.
+      </p>
+
+      <div class="features">
+        <span class="feature-chip"><span class="icon">&#129302;</span> Gemini, OpenAI, or Grok</span>
+        <span class="feature-chip"><span class="icon">&#128250;</span> Nuvio Sync integration</span>
+        <span class="feature-chip"><span class="icon">&#127919;</span> Personalized catalogs</span>
+        <span class="feature-chip"><span class="icon">&#127757;</span> Multi-language support</span>
+      </div>
+
+      <a href="/configure" class="cta-btn">Create New Configuration</a>
+
+      <p class="footer-note">
+        You will receive a unique manifest URL to install in Stremio.
+      </p>
+    </div>
+  </main>
+</body>
+</html>`;

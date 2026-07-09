@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configure - AI Recommendations for Stremio</title>
+  <style>
+    :root {
+      --md-primary: #6750A4;
+      --md-on-primary: #FFFFFF;
+      --md-primary-container: #EADDFF;
+      --md-on-primary-container: #21005D;
+      --md-secondary: #625B71;
+      --md-on-secondary: #FFFFFF;
+      --md-secondary-container: #E8DEF8;
+      --md-surface: #FFFBFE;
+      --md-surface-variant: #E7E0EC;
+      --md-on-surface: #1C1B1F;
+      --md-on-surface-variant: #49454F;
+      --md-outline: #79747E;
+      --md-outline-variant: #CAC4D0;
+      --md-error: #B3261E;
+      --md-on-error: #FFFFFF;
+      --md-error-container: #F9DEDC;
+      --md-success: #386A20;
+      --md-success-container: #B8F397;
+      --md-elevation-1: 0 1px 3px 1px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.3);
+      --md-elevation-2: 0 2px 6px 2px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.3);
+      --md-shape-medium: 12px;
+      --md-shape-large: 16px;
+      --md-shape-extra-large: 28px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: var(--md-surface);
+      color: var(--md-on-surface);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .app-bar {
+      background-color: var(--md-primary);
+      color: var(--md-on-primary);
+      padding: 16px 24px;
+      box-shadow: var(--md-elevation-2);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .app-bar h1 {
+      font-size: 22px;
+      font-weight: 400;
+      letter-spacing: 0;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 16px;
+    }
+
+    .card {
+      background: var(--md-surface);
+      border-radius: var(--md-shape-large);
+      box-shadow: var(--md-elevation-1);
+      padding: 24px;
+      margin-bottom: 24px;
+      border: 1px solid var(--md-outline-variant);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--md-on-surface);
+      margin-bottom: 16px;
+      letter-spacing: 0.15px;
+    }
+
+    .field-group {
+      margin-bottom: 20px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--md-on-surface-variant);
+      margin-bottom: 6px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .field-label .required {
+      color: var(--md-error);
+      margin-left: 2px;
+    }
+
+    .text-input {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 16px;
+      border: 1px solid var(--md-outline);
+      border-radius: var(--md-shape-medium);
+      background: var(--md-surface);
+      color: var(--md-on-surface);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+
+    .text-input:focus {
+      border-color: var(--md-primary);
+      box-shadow: 0 0 0 1px var(--md-primary);
+    }
+
+    .text-input.error {
+      border-color: var(--md-error);
+      box-shadow: 0 0 0 1px var(--md-error);
+    }
+
+    .text-input::placeholder {
+      color: var(--md-on-surface-variant);
+      opacity: 0.7;
+    }
+
+    textarea.text-input {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .radio-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border: 1px solid var(--md-outline);
+      border-radius: var(--md-shape-extra-large);
+      cursor: pointer;
+      transition: background-color 0.2s, border-color 0.2s;
+      user-select: none;
+    }
+
+    .radio-option:hover {
+      background-color: var(--md-surface-variant);
+    }
+
+    .radio-option input[type="radio"] {
+      accent-color: var(--md-primary);
+      width: 18px;
+      height: 18px;
+    }
+
+    .radio-option input[type="radio"]:checked + span {
+      color: var(--md-primary);
+      font-weight: 500;
+    }
+
+    .radio-option:has(input:checked) {
+      border-color: var(--md-primary);
+      background-color: var(--md-primary-container);
+    }
+
+    .multi-select {
+      position: relative;
+    }
+
+    .multi-select-display {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 16px;
+      border: 1px solid var(--md-outline);
+      border-radius: var(--md-shape-medium);
+      background: var(--md-surface);
+      color: var(--md-on-surface);
+      cursor: pointer;
+      min-height: 48px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      transition: border-color 0.2s;
+    }
+
+    .multi-select-display:focus-within {
+      border-color: var(--md-primary);
+      box-shadow: 0 0 0 1px var(--md-primary);
+    }
+
+    .multi-select-display.error {
+      border-color: var(--md-error);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 12px;
+      background: var(--md-secondary-container);
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--md-on-surface);
+    }
+
+    .chip-remove {
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      color: var(--md-on-surface-variant);
+      border: none;
+      background: none;
+      padding: 0 2px;
+    }
+
+    .chip-remove:hover {
+      color: var(--md-error);
+    }
+
+    .multi-select-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--md-surface);
+      border: 1px solid var(--md-outline);
+      border-radius: var(--md-shape-medium);
+      box-shadow: var(--md-elevation-2);
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 50;
+      display: none;
+    }
+
+    .multi-select-dropdown.open {
+      display: block;
+    }
+
+    .multi-select-option {
+      padding: 10px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.15s;
+    }
+
+    .multi-select-option:hover {
+      background-color: var(--md-surface-variant);
+    }
+
+    .multi-select-option.selected {
+      background-color: var(--md-primary-container);
+      color: var(--md-on-primary-container);
+    }
+
+    .field-error {
+      font-size: 12px;
+      color: var(--md-error);
+      margin-top: 4px;
+      display: none;
+    }
+
+    .field-error.visible {
+      display: block;
+    }
+
+    .optional-section {
+      border-top: 1px solid var(--md-outline-variant);
+      padding-top: 20px;
+      margin-top: 20px;
+    }
+
+    .optional-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      padding: 8px 0;
+      user-select: none;
+    }
+
+    .optional-header h3 {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--md-on-surface-variant);
+      letter-spacing: 0.1px;
+    }
+
+    .optional-header .toggle-icon {
+      font-size: 20px;
+      color: var(--md-on-surface-variant);
+      transition: transform 0.2s;
+    }
+
+    .optional-header.expanded .toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .optional-content {
+      display: none;
+      padding-top: 16px;
+    }
+
+    .optional-content.expanded {
+      display: block;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.1px;
+      border-radius: var(--md-shape-extra-large);
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s, box-shadow 0.2s;
+      text-decoration: none;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background-color: var(--md-primary);
+      color: var(--md-on-primary);
+    }
+
+    .btn-primary:hover {
+      box-shadow: var(--md-elevation-1);
+      opacity: 0.92;
+    }
+
+    .btn-primary:disabled {
+      background-color: var(--md-outline-variant);
+      color: var(--md-on-surface-variant);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--md-outline);
+      color: var(--md-primary);
+    }
+
+    .btn-outline:hover {
+      background-color: var(--md-primary-container);
+    }
+
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .success-banner {
+      background-color: var(--md-success-container);
+      border-radius: var(--md-shape-medium);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: none;
+    }
+
+    .success-banner.visible {
+      display: block;
+    }
+
+    .success-banner p {
+      font-size: 14px;
+      color: var(--md-success);
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .manifest-url-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--md-surface);
+      border: 1px solid var(--md-outline-variant);
+      border-radius: var(--md-shape-medium);
+      padding: 10px 14px;
+    }
+
+    .manifest-url-box code {
+      flex: 1;
+      font-size: 14px;
+      word-break: break-all;
+      font-family: 'Fira Code', 'Consolas', monospace;
+      color: var(--md-on-primary-container);
+    }
+
+    .copy-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--md-primary);
+      font-size: 20px;
+      padding: 4px;
+      border-radius: 50%;
+      transition: background-color 0.2s;
+    }
+
+    .copy-btn:hover {
+      background-color: var(--md-primary-container);
+    }
+
+    .error-banner {
+      background-color: var(--md-error-container);
+      border-radius: var(--md-shape-medium);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: none;
+    }
+
+    .error-banner.visible {
+      display: block;
+    }
+
+    .error-banner p {
+      font-size: 14px;
+      color: var(--md-error);
+    }
+
+    .masked-key-info {
+      font-size: 12px;
+      color: var(--md-on-surface-variant);
+      margin-top: 4px;
+      font-style: italic;
+    }
+
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.3);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+
+    .loading-overlay.visible {
+      display: flex;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--md-primary-container);
+      border-top-color: var(--md-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 16px 12px;
+      }
+
+      .card {
+        padding: 16px;
+      }
+
+      .radio-group {
+        flex-direction: column;
+      }
+
+      .form-actions {
+        flex-direction: column;
+      }
+
+      .form-actions .btn {
+        width: 100%;
+      }
+
+      .manifest-url-box {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .manifest-url-box code {
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-bar">
+    <h1>AI Recommendations — Configure</h1>
+  </header>
+
+  <main class="container">
+    <!-- Success Banner -->
+    <div id="success-banner" class="success-banner" role="alert">
+      <p>Configuration saved successfully!</p>
+      <div class="manifest-url-box">
+        <code id="manifest-url"></code>
+        <button class="copy-btn" onclick="copyManifestUrl()" title="Copy to clipboard" aria-label="Copy manifest URL">
+          &#x1F4CB;
+        </button>
+      </div>
+    </div>
+
+    <!-- Error Banner -->
+    <div id="error-banner" class="error-banner" role="alert">
+      <p id="error-message"></p>
+    </div>
+
+    <form id="config-form" novalidate>
+      <!-- Mandatory Fields -->
+      <div class="card">
+        <h2 class="card-title">Required Settings</h2>
+
+        <!-- AI Provider -->
+        <div class="field-group">
+          <label class="field-label">AI Provider <span class="required">*</span></label>
+          <div class="radio-group" role="radiogroup" aria-label="AI Provider selection">
+            <label class="radio-option">
+              <input type="radio" name="ai_provider" value="gemini">
+              <span>Gemini</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="ai_provider" value="openai">
+              <span>OpenAI</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="ai_provider" value="grok">
+              <span>Grok</span>
+            </label>
+          </div>
+          <p class="field-error" id="error-ai_provider">Please select an AI provider</p>
+        </div>
+
+        <!-- API Key -->
+        <div class="field-group">
+          <label class="field-label" for="api_key">API Key <span class="required">*</span></label>
+          <input
+            type="password"
+            id="api_key"
+            name="api_key"
+            class="text-input"
+            placeholder="Enter your API key"
+            autocomplete="off"
+          >
+          <p class="masked-key-info" id="masked-key-info" style="display:none;"></p>
+          <p class="field-error" id="error-api_key">API key is required</p>
+        </div>
+
+        <!-- Languages -->
+        <div class="field-group">
+          <label class="field-label">Languages <span class="required">*</span></label>
+          <div class="multi-select" id="languages-select">
+            <div class="multi-select-display" tabindex="0" aria-label="Select languages">
+              <span class="multi-select-placeholder">Select languages...</span>
+            </div>
+            <div class="multi-select-dropdown">
+              <div class="multi-select-option" data-value="en">English</div>
+              <div class="multi-select-option" data-value="es">Spanish</div>
+              <div class="multi-select-option" data-value="fr">French</div>
+              <div class="multi-select-option" data-value="de">German</div>
+              <div class="multi-select-option" data-value="it">Italian</div>
+              <div class="multi-select-option" data-value="pt">Portuguese</div>
+              <div class="multi-select-option" data-value="ja">Japanese</div>
+              <div class="multi-select-option" data-value="ko">Korean</div>
+              <div class="multi-select-option" data-value="zh">Chinese</div>
+              <div class="multi-select-option" data-value="hi">Hindi</div>
+              <div class="multi-select-option" data-value="ar">Arabic</div>
+              <div class="multi-select-option" data-value="ru">Russian</div>
+              <div class="multi-select-option" data-value="nl">Dutch</div>
+              <div class="multi-select-option" data-value="sv">Swedish</div>
+              <div class="multi-select-option" data-value="pl">Polish</div>
+              <div class="multi-select-option" data-value="tr">Turkish</div>
+            </div>
+          </div>
+          <p class="field-error" id="error-languages">At least one language is required</p>
+        </div>
+
+        <!-- Nuvio Sync Credentials -->
+        <div class="field-group">
+          <label class="field-label" for="nuvio_credentials">Nuvio Sync Credentials <span class="required">*</span></label>
+          <input
+            type="password"
+            id="nuvio_credentials"
+            name="nuvio_credentials"
+            class="text-input"
+            placeholder="Enter your Nuvio Sync auth token"
+            autocomplete="off"
+          >
+          <p class="field-error" id="error-nuvio_credentials">Nuvio Sync credentials are required</p>
+        </div>
+      </div>
+
+      <!-- Optional Fields -->
+      <div class="card">
+        <div class="optional-header" id="optional-toggle" role="button" aria-expanded="false" tabindex="0">
+          <h3>Optional Settings</h3>
+          <span class="toggle-icon">&#9660;</span>
+        </div>
+        <div class="optional-content" id="optional-content">
+
+          <!-- Fine Tuning Parameters -->
+          <div class="field-group">
+            <label class="field-label" for="fine_tuning_params">Fine-Tuning Parameters</label>
+            <textarea
+              id="fine_tuning_params"
+              name="fine_tuning_params"
+              class="text-input"
+              placeholder="e.g., Focus on indie films, prefer recent releases..."
+            ></textarea>
+          </div>
+
+          <!-- Country Filter -->
+          <div class="field-group">
+            <label class="field-label">Country Filter</label>
+            <div class="multi-select" id="country-select">
+              <div class="multi-select-display" tabindex="0" aria-label="Select countries">
+                <span class="multi-select-placeholder">Select countries...</span>
+              </div>
+              <div class="multi-select-dropdown">
+                <div class="multi-select-option" data-value="US">United States</div>
+                <div class="multi-select-option" data-value="CA">Canada</div>
+                <div class="multi-select-option" data-value="AU">Australia</div>
+                <div class="multi-select-option" data-value="NZ">New Zealand</div>
+                <div class="multi-select-option" data-value="GB">United Kingdom</div>
+                <div class="multi-select-option" data-value="IE">Ireland</div>
+                <div class="multi-select-option" data-value="DE">Germany</div>
+                <div class="multi-select-option" data-value="FR">France</div>
+                <div class="multi-select-option" data-value="ES">Spain</div>
+                <div class="multi-select-option" data-value="IT">Italy</div>
+                <div class="multi-select-option" data-value="JP">Japan</div>
+                <div class="multi-select-option" data-value="KR">South Korea</div>
+                <div class="multi-select-option" data-value="IN">India</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Genre Exclusion -->
+          <div class="field-group">
+            <label class="field-label">Genre Exclusions</label>
+            <div class="multi-select" id="genre-exclusion-select">
+              <div class="multi-select-display" tabindex="0" aria-label="Select genres to exclude">
+                <span class="multi-select-placeholder">Select genres to exclude...</span>
+              </div>
+              <div class="multi-select-dropdown">
+                <div class="multi-select-option" data-value="action">Action</div>
+                <div class="multi-select-option" data-value="adventure">Adventure</div>
+                <div class="multi-select-option" data-value="animation">Animation</div>
+                <div class="multi-select-option" data-value="comedy">Comedy</div>
+                <div class="multi-select-option" data-value="crime">Crime</div>
+                <div class="multi-select-option" data-value="documentary">Documentary</div>
+                <div class="multi-select-option" data-value="drama">Drama</div>
+                <div class="multi-select-option" data-value="fantasy">Fantasy</div>
+                <div class="multi-select-option" data-value="horror">Horror</div>
+                <div class="multi-select-option" data-value="mystery">Mystery</div>
+                <div class="multi-select-option" data-value="romance">Romance</div>
+                <div class="multi-select-option" data-value="sci-fi">Sci-Fi</div>
+                <div class="multi-select-option" data-value="thriller">Thriller</div>
+                <div class="multi-select-option" data-value="western">Western</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Genre Preference -->
+          <div class="field-group">
+            <label class="field-label">Genre Preferences</label>
+            <div class="multi-select" id="genre-preference-select">
+              <div class="multi-select-display" tabindex="0" aria-label="Select preferred genres">
+                <span class="multi-select-placeholder">Select preferred genres...</span>
+              </div>
+              <div class="multi-select-dropdown">
+                <div class="multi-select-option" data-value="action">Action</div>
+                <div class="multi-select-option" data-value="adventure">Adventure</div>
+                <div class="multi-select-option" data-value="animation">Animation</div>
+                <div class="multi-select-option" data-value="comedy">Comedy</div>
+                <div class="multi-select-option" data-value="crime">Crime</div>
+                <div class="multi-select-option" data-value="documentary">Documentary</div>
+                <div class="multi-select-option" data-value="drama">Drama</div>
+                <div class="multi-select-option" data-value="fantasy">Fantasy</div>
+                <div class="multi-select-option" data-value="horror">Horror</div>
+                <div class="multi-select-option" data-value="mystery">Mystery</div>
+                <div class="multi-select-option" data-value="romance">Romance</div>
+                <div class="multi-select-option" data-value="sci-fi">Sci-Fi</div>
+                <div class="multi-select-option" data-value="thriller">Thriller</div>
+                <div class="multi-select-option" data-value="western">Western</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+          Save Add-on
+        </button>
+      </div>
+    </form>
+  </main>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loading-overlay" aria-hidden="true">
+    <div class="spinner"></div>
+  </div>
+
+  <script>
+    // Server-injected data placeholders
+    const CONFIG_DATA = {{CONFIG_DATA}};
+    const UUID = "{{UUID}}";
+
+    // ===== Multi-Select Component =====
+    class MultiSelect {
+      constructor(containerId, options = {}) {
+        this.container = document.getElementById(containerId);
+        this.display = this.container.querySelector('.multi-select-display');
+        this.dropdown = this.container.querySelector('.multi-select-dropdown');
+        this.options = this.container.querySelectorAll('.multi-select-option');
+        this.selected = new Set();
+        this.placeholder = options.placeholder || 'Select...';
+        this.init();
+      }
+
+      init() {
+        this.display.addEventListener('click', () => this.toggleDropdown());
+        this.display.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            this.toggleDropdown();
+          }
+        });
+
+        this.options.forEach(opt => {
+          opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleOption(opt.dataset.value, opt.textContent);
+          });
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!this.container.contains(e.target)) {
+            this.closeDropdown();
+          }
+        });
+      }
+
+      toggleDropdown() {
+        this.dropdown.classList.toggle('open');
+      }
+
+      closeDropdown() {
+        this.dropdown.classList.remove('open');
+      }
+
+      toggleOption(value, label) {
+        if (this.selected.has(value)) {
+          this.selected.delete(value);
+        } else {
+          this.selected.add(value);
+        }
+        this.updateDisplay();
+        this.updateOptions();
+      }
+
+      setValues(values) {
+        this.selected = new Set(values);
+        this.updateDisplay();
+        this.updateOptions();
+      }
+
+      getValues() {
+        return Array.from(this.selected);
+      }
+
+      updateDisplay() {
+        const chips = Array.from(this.selected).map(value => {
+          const opt = this.container.querySelector(`[data-value="${value}"]`);
+          const label = opt ? opt.textContent : value;
+          return `<span class="chip">${label}<button type="button" class="chip-remove" data-value="${value}">&times;</button></span>`;
+        });
+
+        if (chips.length === 0) {
+          this.display.innerHTML = `<span class="multi-select-placeholder">${this.placeholder}</span>`;
+        } else {
+          this.display.innerHTML = chips.join('');
+        }
+
+        // Re-attach chip remove handlers
+        this.display.querySelectorAll('.chip-remove').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.selected.delete(btn.dataset.value);
+            this.updateDisplay();
+            this.updateOptions();
+          });
+        });
+      }
+
+      updateOptions() {
+        this.options.forEach(opt => {
+          if (this.selected.has(opt.dataset.value)) {
+            opt.classList.add('selected');
+          } else {
+            opt.classList.remove('selected');
+          }
+        });
+      }
+    }
+
+    // ===== Initialize Multi-Selects =====
+    const languagesSelect = new MultiSelect('languages-select', { placeholder: 'Select languages...' });
+    const countrySelect = new MultiSelect('country-select', { placeholder: 'Select countries...' });
+    const genreExclusionSelect = new MultiSelect('genre-exclusion-select', { placeholder: 'Select genres to exclude...' });
+    const genrePreferenceSelect = new MultiSelect('genre-preference-select', { placeholder: 'Select preferred genres...' });
+
+    // ===== Optional Section Toggle =====
+    const optionalToggle = document.getElementById('optional-toggle');
+    const optionalContent = document.getElementById('optional-content');
+
+    optionalToggle.addEventListener('click', () => {
+      const isExpanded = optionalContent.classList.toggle('expanded');
+      optionalToggle.classList.toggle('expanded', isExpanded);
+      optionalToggle.setAttribute('aria-expanded', isExpanded);
+    });
+
+    optionalToggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        optionalToggle.click();
+      }
+    });
+
+    // ===== Pre-fill form if editing existing config =====
+    if (CONFIG_DATA && CONFIG_DATA.uuid) {
+      // Pre-fill AI provider
+      const providerRadio = document.querySelector(`input[name="ai_provider"][value="${CONFIG_DATA.ai_provider}"]`);
+      if (providerRadio) providerRadio.checked = true;
+
+      // Show masked API key info
+      if (CONFIG_DATA.masked_api_key) {
+        const maskedInfo = document.getElementById('masked-key-info');
+        maskedInfo.textContent = `Current key: ${CONFIG_DATA.masked_api_key} (leave blank to keep)`;
+        maskedInfo.style.display = 'block';
+        document.getElementById('api_key').placeholder = 'Leave blank to keep current key';
+      }
+
+      // Pre-fill languages
+      if (CONFIG_DATA.languages && CONFIG_DATA.languages.length > 0) {
+        languagesSelect.setValues(CONFIG_DATA.languages);
+      }
+
+      // Pre-fill Nuvio credentials placeholder
+      if (CONFIG_DATA.has_nuvio_credentials) {
+        document.getElementById('nuvio_credentials').placeholder = 'Leave blank to keep current credentials';
+      }
+
+      // Pre-fill optional fields
+      if (CONFIG_DATA.fine_tuning_params) {
+        document.getElementById('fine_tuning_params').value = CONFIG_DATA.fine_tuning_params;
+      }
+      if (CONFIG_DATA.country_filter && CONFIG_DATA.country_filter.length > 0) {
+        countrySelect.setValues(CONFIG_DATA.country_filter);
+        optionalContent.classList.add('expanded');
+        optionalToggle.classList.add('expanded');
+        optionalToggle.setAttribute('aria-expanded', 'true');
+      }
+      if (CONFIG_DATA.genre_exclusions && CONFIG_DATA.genre_exclusions.length > 0) {
+        genreExclusionSelect.setValues(CONFIG_DATA.genre_exclusions);
+        optionalContent.classList.add('expanded');
+        optionalToggle.classList.add('expanded');
+        optionalToggle.setAttribute('aria-expanded', 'true');
+      }
+      if (CONFIG_DATA.genre_preferences && CONFIG_DATA.genre_preferences.length > 0) {
+        genrePreferenceSelect.setValues(CONFIG_DATA.genre_preferences);
+        optionalContent.classList.add('expanded');
+        optionalToggle.classList.add('expanded');
+        optionalToggle.setAttribute('aria-expanded', 'true');
+      }
+    }
+
+    // ===== Form Validation =====
+    function clearErrors() {
+      document.querySelectorAll('.field-error').forEach(el => el.classList.remove('visible'));
+      document.querySelectorAll('.text-input').forEach(el => el.classList.remove('error'));
+      document.querySelectorAll('.multi-select-display').forEach(el => el.classList.remove('error'));
+    }
+
+    function showError(fieldId, message) {
+      const errorEl = document.getElementById(`error-${fieldId}`);
+      if (errorEl) {
+        if (message) errorEl.textContent = message;
+        errorEl.classList.add('visible');
+      }
+      // Also mark the input
+      const input = document.getElementById(fieldId);
+      if (input) input.classList.add('error');
+    }
+
+    function validateForm() {
+      clearErrors();
+      let valid = true;
+
+      // AI Provider
+      const provider = document.querySelector('input[name="ai_provider"]:checked');
+      if (!provider) {
+        showError('ai_provider');
+        valid = false;
+      }
+
+      // API Key (required for new, optional for update)
+      const apiKey = document.getElementById('api_key').value.trim();
+      const isUpdate = CONFIG_DATA && CONFIG_DATA.uuid;
+      if (!apiKey && !isUpdate) {
+        showError('api_key');
+        valid = false;
+      }
+
+      // Languages
+      if (languagesSelect.getValues().length === 0) {
+        showError('languages');
+        const display = document.querySelector('#languages-select .multi-select-display');
+        display.classList.add('error');
+        valid = false;
+      }
+
+      // Nuvio Credentials (required for new, optional for update)
+      const nuvioCreds = document.getElementById('nuvio_credentials').value.trim();
+      if (!nuvioCreds && !isUpdate) {
+        showError('nuvio_credentials');
+        valid = false;
+      }
+
+      return valid;
+    }
+
+    // ===== Form Submission =====
+    const form = document.getElementById('config-form');
+    const submitBtn = document.getElementById('submit-btn');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const successBanner = document.getElementById('success-banner');
+    const errorBanner = document.getElementById('error-banner');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      // Hide previous messages
+      successBanner.classList.remove('visible');
+      errorBanner.classList.remove('visible');
+
+      if (!validateForm()) return;
+
+      // Build payload
+      const payload = {
+        ai_provider: document.querySelector('input[name="ai_provider"]:checked').value,
+        languages: languagesSelect.getValues(),
+      };
+
+      const apiKey = document.getElementById('api_key').value.trim();
+      if (apiKey) payload.api_key = apiKey;
+
+      const nuvioCreds = document.getElementById('nuvio_credentials').value.trim();
+      if (nuvioCreds) payload.nuvio_credentials = nuvioCreds;
+
+      // Optional fields
+      const fineTuning = document.getElementById('fine_tuning_params').value.trim();
+      if (fineTuning) payload.fine_tuning_params = fineTuning;
+
+      const countries = countrySelect.getValues();
+      if (countries.length > 0) payload.country_filter = countries;
+
+      const genreExclusions = genreExclusionSelect.getValues();
+      if (genreExclusions.length > 0) payload.genre_exclusions = genreExclusions;
+
+      const genrePreferences = genrePreferenceSelect.getValues();
+      if (genrePreferences.length > 0) payload.genre_preferences = genrePreferences;
+
+      // Determine endpoint
+      const isUpdate = CONFIG_DATA && CONFIG_DATA.uuid;
+      const endpoint = isUpdate ? `/${UUID}/configure` : '/configure';
+
+      // Submit
+      loadingOverlay.classList.add('visible');
+      submitBtn.disabled = true;
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const manifestUrl = data.manifest_url || `muxvyr.com/${data.uuid || UUID}/manifest.json`;
+          document.getElementById('manifest-url').textContent = manifestUrl;
+          successBanner.classList.add('visible');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          const message = data.error || 'An unexpected error occurred';
+          let fullMessage = message;
+          if (data.fields) {
+            const fieldErrors = Object.entries(data.fields).map(([k, v]) => `${k}: ${v}`).join(', ');
+            fullMessage += ` (${fieldErrors})`;
+          }
+          document.getElementById('error-message').textContent = fullMessage;
+          errorBanner.classList.add('visible');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } catch (err) {
+        document.getElementById('error-message').textContent = 'Network error. Please check your connection and try again.';
+        errorBanner.classList.add('visible');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } finally {
+        loadingOverlay.classList.remove('visible');
+        submitBtn.disabled = false;
+      }
+    });
+
+    // ===== Copy Manifest URL =====
+    function copyManifestUrl() {
+      const url = document.getElementById('manifest-url').textContent;
+      navigator.clipboard.writeText(url).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '✓';
+        setTimeout(() => { btn.textContent = '📋'; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

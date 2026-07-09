@@ -1,0 +1,34 @@
+{
+  "name": "stremio-ai-recommendations",
+  "version": "2.0.0",
+  "description": "AI-powered Stremio add-on for personalized content recommendations (self-hosted)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/src/server.js",
+    "dev": "tsx --watch src/server.ts",
+    "worker": "node dist/src/worker.js",
+    "worker:dev": "tsx --watch src/worker.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "bullmq": "^5.30.0",
+    "dotenv": "^16.4.7",
+    "hono": "^4.6.0",
+    "ioredis": "^5.4.2",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "@types/node-cron": "^3.0.11",
+    "fast-check": "^3.23.2",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
