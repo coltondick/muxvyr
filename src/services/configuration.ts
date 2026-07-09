@@ -56,10 +56,7 @@ export async function createConfiguration(
   const encryptedNuvio = encrypt(input.nuvio_credentials, key);
 
   const result = await query<{ uuid: string }>(
-    `INSERT INTO user_configurations
-      (ai_provider, encrypted_api_key, api_key_iv, languages, nuvio_credentials, nuvio_credentials_iv, fine_tuning_params, country_filter, genre_exclusions, genre_preferences)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    RETURNING uuid`,
+    "INSERT INTO user_configurations (ai_provider, encrypted_api_key, api_key_iv, languages, nuvio_credentials, nuvio_credentials_iv, fine_tuning_params, country_filter, genre_exclusions, genre_preferences) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING uuid",
     [
       input.ai_provider,
       encryptedApiKey.ciphertext,
@@ -84,7 +81,7 @@ export async function getConfiguration(
   uuid: string
 ): Promise<UserConfiguration | null> {
   const result = await query<UserConfiguration>(
-    `SELECT * FROM user_configurations WHERE uuid = $1`,
+    "SELECT * FROM user_configurations WHERE uuid = $1",
     [uuid]
   );
 
@@ -101,58 +98,56 @@ export async function updateConfiguration(
 ): Promise<boolean> {
   const setClauses: string[] = [];
   const values: unknown[] = [];
-  let paramIndex = 1;
+  let idx = 1;
 
   if (input.api_key !== undefined) {
     const key = importKey(getEncryptionKey());
     const encrypted = encrypt(input.api_key, key);
-    setClauses.push(`encrypted_api_key = $${paramIndex++}`);
+    setClauses.push("encrypted_api_key = $" + idx++);
     values.push(encrypted.ciphertext);
-    setClauses.push(`api_key_iv = $${paramIndex++}`);
+    setClauses.push("api_key_iv = $" + idx++);
     values.push(encrypted.iv);
   }
 
   if (input.nuvio_credentials !== undefined) {
     const key = importKey(getEncryptionKey());
     const encrypted = encrypt(input.nuvio_credentials, key);
-    setClauses.push(`nuvio_credentials = $${paramIndex++}`);
+    setClauses.push("nuvio_credentials = $" + idx++);
     values.push(encrypted.ciphertext);
-    setClauses.push(`nuvio_credentials_iv = $${paramIndex++}`);
+    setClauses.push("nuvio_credentials_iv = $" + idx++);
     values.push(encrypted.iv);
   }
 
   if (input.ai_provider !== undefined) {
-    setClauses.push(`ai_provider = $${paramIndex++}`);
+    setClauses.push("ai_provider = $" + idx++);
     values.push(input.ai_provider);
   }
   if (input.languages !== undefined) {
-    setClauses.push(`languages = $${paramIndex++}`);
+    setClauses.push("languages = $" + idx++);
     values.push(input.languages);
   }
   if (input.fine_tuning_params !== undefined) {
-    setClauses.push(`fine_tuning_params = $${paramIndex++}`);
+    setClauses.push("fine_tuning_params = $" + idx++);
     values.push(input.fine_tuning_params);
   }
   if (input.country_filter !== undefined) {
-    setClauses.push(`country_filter = $${paramIndex++}`);
+    setClauses.push("country_filter = $" + idx++);
     values.push(input.country_filter);
   }
   if (input.genre_exclusions !== undefined) {
-    setClauses.push(`genre_exclusions = $${paramIndex++}`);
+    setClauses.push("genre_exclusions = $" + idx++);
     values.push(input.genre_exclusions);
   }
   if (input.genre_preferences !== undefined) {
-    setClauses.push(`genre_preferences = $${paramIndex++}`);
+    setClauses.push("genre_preferences = $" + idx++);
     values.push(input.genre_preferences);
   }
 
   if (setClauses.length === 0) return true;
 
   values.push(uuid);
-  const result = await query(
-    `UPDATE user_configurations SET ${setClauses.join(", ")} WHERE uuid = $${paramIndex}`,
-    values
-  );
+  const sql = "UPDATE user_configurations SET " + setClauses.join(", ") + " WHERE uuid = $" + idx;
+  const result = await query(sql, values);
 
   return (result.rowCount ?? 0) > 0;
 }
@@ -162,7 +157,7 @@ export async function updateConfiguration(
  */
 export async function deleteConfiguration(uuid: string): Promise<boolean> {
   const result = await query(
-    `DELETE FROM user_configurations WHERE uuid = $1`,
+    "DELETE FROM user_configurations WHERE uuid = $1",
     [uuid]
   );
   return (result.rowCount ?? 0) > 0;
@@ -173,7 +168,7 @@ export async function deleteConfiguration(uuid: string): Promise<boolean> {
  */
 export async function listConfigurations(): Promise<UserConfiguration[]> {
   const result = await query<UserConfiguration>(
-    `SELECT * FROM user_configurations ORDER BY updated_at DESC`
+    "SELECT * FROM user_configurations ORDER BY updated_at DESC"
   );
   return result.rows;
 }

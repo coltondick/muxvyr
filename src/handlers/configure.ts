@@ -241,8 +241,10 @@ export async function handleCreateConfigure(c: Context): Promise<Response> {
       genre_exclusions: input.genre_exclusions as string[] | undefined,
       genre_preferences: input.genre_preferences as string[] | undefined,
     });
-  } catch {
-    return c.json({ error: "Failed to create configuration" }, 500);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[createConfiguration] Error:", message);
+    return c.json({ error: "Failed to create configuration", detail: message }, 500);
   }
 
   // Enqueue background catalog generation
