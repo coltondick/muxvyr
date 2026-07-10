@@ -10,6 +10,7 @@ import { getCatalog, invalidateUser, scanKeys } from "../services/cache.js";
 import { getConfiguration, listConfigurations, deleteConfiguration } from "../services/configuration.js";
 import { decrypt, importKey } from "../services/encryption.js";
 import { fetchWatchHistory } from "../services/nuvio-sync.js";
+import { redis } from "../lib/redis.js";
 import { getAdminPassword, getEncryptionKey } from "../lib/config.js";
 import { query } from "../lib/db.js";
 import { catalogQueue } from "../lib/queue.js";
@@ -82,6 +83,10 @@ export async function handleAdminForceRefresh(c: Context): Promise<Response> {
   if (authErr) return authErr;
   const uuid = c.req.param("uuid") ?? "";
   try {
+    // Clear any existing generation lock so admin refresh always works
+    await redis.del("lock:gen:" + uuid);
+    // Also clear the catalog cache so fresh data is generated
+    await invalidateUser(uuid);
     await pregenerateCatalogs(uuid);
     return c.json({ success: true, message: "Recommendations regenerated" });
   } catch (error) {
